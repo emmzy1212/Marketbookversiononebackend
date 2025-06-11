@@ -17,34 +17,69 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Security middleware
-app.use(helmet()); // Set security HTTP headers
-app.use(mongoSanitize()); // Data sanitization against NoSQL query injection
-app.use(xss()); // Data sanitization against XSS
+// -----------------------------
+// 🔐 Security Middleware
+// -----------------------------
+app.use(helmet());
+app.use(mongoSanitize());
+app.use(xss());
 
-// Rate limiting
+// -----------------------------
+// 🌐 CORS Configuration
+// -----------------------------
+const allowedOrigins = [
+  'https://marketbookversionone.vercel.app', // Production
+  'http://localhost:5173'                    // Dev (Vite)
+];
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true); // Allow curl/postman/mobile
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true
+};
+
+app.use(cors(corsOptions));
+
+// -----------------------------
+// 🛡️ Rate Limiting (for user-related routes)
+// -----------------------------
 const limiter = rateLimit({
-  max: 100, // Limit each IP to 100 requests per windowMs
+  max: 100,
   windowMs: 60 * 60 * 1000, // 1 hour
   message: 'Too many requests from this IP, please try again in an hour'
 });
-app.use('/api', limiter);
+app.use('/api/users', limiter);
 
-// Regular middleware
-app.use(cors());
-app.use(express.json({ limit: '10kb' })); // Body limit is 10kb
+// -----------------------------
+// 🔧 Core Middleware
+// -----------------------------
+app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 
-// Routes
+// -----------------------------
+// 🔄 Routes
+// -----------------------------
 app.use('/api/items', itemRoutes);
 app.use('/api/users', userRoutes);
 
-// Root route
+// Health Check Endpoint
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ status: 'ok', uptime: process.uptime() });
+});
+
+// Root Route
 app.get('/', (req, res) => {
   res.send('MarketBook API is running...');
 });
 
-// Error handling middleware
+// -----------------------------
+// 🧯 Error Handling Middleware
+// -----------------------------
 app.use((err, req, res, next) => {
   const statusCode = err.statusCode || 500;
   res.status(statusCode).json({
@@ -54,17 +89,18 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Connect to MongoDB
+// -----------------------------
+// 🚀 MongoDB Connection + Server Start
+// -----------------------------
 mongoose
   .connect(process.env.MONGO_URI)
   .then(() => {
-    console.log('MongoDB connected successfully');
-    // Start server after successful connection
+    console.log('✅ MongoDB connected successfully');
     app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
+      console.log(`🚀 Server running on port ${PORT}`);
     });
   })
   .catch((error) => {
-    console.error(`Error connecting to MongoDB: ${error.message}`);
+    console.error(`❌ MongoDB connection error: ${error.message}`);
     process.exit(1);
   });
